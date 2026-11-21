@@ -1,0 +1,16 @@
+{
+  "title": "Synthetic panel example",
+  "data": "panel_example.csv",
+  "entity": "country",
+  "time": "year",
+  "output_dir": "output",
+  "models": {
+    "baseline": {
+      "formula": "y ~ 1 + x",
+      "effects": "twoway",
+      "cov": "clustered_entity",
+      "key": ["x"],
+      "label": "Baseline"
+    }
+  }
+}
