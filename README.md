@@ -25,7 +25,7 @@ differences are reported separately as **heterogeneity**, not as fragility.
 ## Install
 
 ```bash
-git clone https://github.com/<user>/econometric-diagnostics ~/.claude/skills/econometric-diagnostics
+git clone https://github.com/matheusrwh/econometric-diagnostics ~/.claude/skills/econometric-diagnostics
 pip install -r ~/.claude/skills/econometric-diagnostics/requirements.txt
 ```
 
