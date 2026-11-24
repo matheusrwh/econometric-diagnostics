@@ -3,4 +3,7 @@ __pycache__/
 .venv/
 venv/
 examples/panel_example.csv
+examples/iv_example.csv
+examples/ss_*.csv
 examples/output/
+examples/output_*/

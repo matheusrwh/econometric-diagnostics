@@ -109,3 +109,68 @@ coefficient significant, say so — it is the strongest statement available.
    influential units.
 5. Clustered sampling (firms in sectors, people in regions) → set `cluster` and report
    clustered SEs.
+
+## IV / 2SLS
+
+1. **Replication.** Baseline coefficient, SE and N match the paper; the numerical
+   cross-check line is ~1e-12.
+2. **Is there a first stage?** Look at the first-stage coefficients (sign as argued in the
+   paper) and at the **reduced form**. If the reduced form shows nothing, the IV estimate has
+   nothing to work with, whatever its t-statistic.
+3. **Strength** (one endogenous regressor):
+   - effective F ≥ 23.1 → not weak (Montiel Olea-Pflueger, 10 % worst-case bias);
+   - 10 ≤ F < 23.1 → moderately weak; < 10 → weak (`WEAK_INSTRUMENTS`);
+   - one instrument: the usual 1.96 t-test is reliable only with F > 104.7 (Lee et al.,
+     2022) — `T_TEST_NEEDS_F_ABOVE_104.7`. Below that, report the **Anderson-Rubin** set as
+     the main inference (it is exact-size in the just-identified case whatever F is);
+   - Cragg-Donald / Stock-Yogo only as a reference (iid errors);
+   - several endogenous regressors: Sanderson-Windmeijer conditional F per regressor.
+4. **Inference.** Same SE logic as OLS (clustering where sampling or treatment is grouped).
+   With weak instruments, decide on the AR set, not on the Wald t.
+   - AR set bounded and excludes 0 → the effect is identified and significant robustly;
+   - bounded but contains 0 → not significant under weak-IV-robust inference;
+   - unbounded (`ROBUST_SET_UNBOUNDED`) → the data do not identify β; say so plainly.
+5. **Endogeneity** (control function). Rejection → OLS is inconsistent, IV needed.
+   Non-rejection (`ENDOGENEITY_NOT_REJECTED`) does **not** prove exogeneity: the test has low
+   power when instruments are weak. Report OLS and IV side by side.
+6. **Overidentification** (L > K1). Hansen J (robust) is the test; Sargan only under iid.
+   Rejection (`OVERID_REJECTED`) means instruments disagree: one is invalid, or they identify
+   different LATEs (heterogeneous effects). Use the C statistics and the leave-one-out rows to
+   see which instrument drives it. Non-rejection is not evidence of validity.
+7. **Estimator.** LIML / Fuller close to 2SLS → no many-weak-instrument bias. A large
+   2SLS–LIML gap with L > 1 → weak or many instruments: prefer LIML/Fuller and the AR set.
+8. **Exclusion restriction**: argued, never tested. Recommend a sensitivity analysis
+   (Conley, Hansen and Rossi 2012, "plausibly exogenous") and falsification tests specific
+   to the design (placebo outcomes, pre-periods).
+
+## Shift-share (Bartik) IV
+
+First ask which identification argument the paper makes.
+
+1. **Inference — always.** Clustered SEs by region/state ignore that regions with similar
+   shares have correlated errors and over-reject (in the validation Monte Carlo, robust and
+   state-clustered SEs reject a true null ~25 % of the time at 5 %). Recommend **AKM** SEs
+   and report the **AKM0** set; AKM0 has the right size even with few effective shocks
+   (AKM itself over-rejects somewhat then — ~11 % in the same Monte Carlo). The
+   region-level AR set is *not* a substitute: it ignores the shock-level correlation.
+   `AKM_SE_LARGER_THAN_BASELINE` (> 1.25×) means the paper's SEs understate uncertainty.
+   Use `shock_cluster` when shocks are correlated within groups (e.g. 3-digit industries).
+2. **Strength**: use the smaller of the effective F and the AKM first-stage F.
+3. **Incomplete shares** (`INCOMPLETE_SHARES_NOT_CONTROLLED`): when shares do not sum to one
+   (e.g. manufacturing shares), the instrument mixes the shocks with the total share.
+   Borusyak-Hull-Jaravel: control for the sum of shares (interacted with period in stacked
+   panels). Compare the `Control for the sum of shares` row.
+4. **Identification from shares** (GPSS): read the Rotemberg weights.
+   - `CONCENTRATED_ROTEMBERG_WEIGHTS` (top 5 > 50 % of |α|): the estimate rests on a few
+     sectors → their shares are the instruments that must be exogenous. Recommend, for those
+     sectors: balance of shares on pre-period characteristics, pre-trends, and the IV using
+     each top sector alone (`beta_k` in the JSON).
+   - `NEGATIVE_ROTEMBERG_WEIGHTS` (sum < −0.10): the estimate is not a convex combination of
+     sector-level estimates; with heterogeneous effects it may not be interpretable as a
+     weighted average effect.
+5. **Identification from shocks** (BHJ): many, as-good-as-random shocks are needed.
+   `FEW_EFFECTIVE_SHOCKS` (effective number < 20, heuristic) → inference and consistency are
+   fragile; recommend the shock-level regression and balance of shocks on sector
+   characteristics (not computed by the script: Stata `ssaggregate`).
+6. **Shock jackknife**: name the sectors (or shock clusters) whose removal moves β most;
+   if one sector drives the result, discuss it explicitly.

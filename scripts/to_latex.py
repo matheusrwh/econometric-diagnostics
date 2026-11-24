@@ -29,6 +29,24 @@ PT = {
     "Baseline": "Base", "A. Inference": "A. Inferência", "B. Estimator": "B. Estimador",
     "C. Sample": "C. Amostra", "Observations": "Observações",
     "Jackknife (leave one entity out): range": "Jackknife (exclui uma unidade): intervalo",
+    "Jackknife (leave one cluster out): range": "Jackknife (exclui um cluster): intervalo",
+    "Jackknife (leave one unit out): range": "Jackknife (exclui uma unidade): intervalo",
+    "Jackknife (leave one shock out): range": "Jackknife (exclui um choque): intervalo",
+    "Jackknife (leave one shock cluster out): range":
+        "Jackknife (exclui um cluster de choques): intervalo",
+    "First stage: effective F (Montiel Olea-Pflueger)": "1º estágio: F efetivo (Montiel Olea-Pflueger)",
+    "First stage: robust F (Kleibergen-Paap Wald)": "1º estágio: F robusto (Kleibergen-Paap)",
+    "First stage: Cragg-Donald F (iid)": "1º estágio: F de Cragg-Donald (iid)",
+    "Reduced form (= Anderson-Rubin test of beta = 0)": "Forma reduzida (= teste AR de beta = 0)",
+    "Anderson-Rubin 95% confidence set": "Conjunto de confiança de Anderson-Rubin (95%)",
+    "Endogeneity: control function (robust DWH)": "Endogeneidade: função de controle (DWH robusto)",
+    "Hansen J (overidentification)": "J de Hansen (sobreidentificação)",
+    "C. Instruments": "C. Instrumentos", "D. Sample": "D. Amostra",
+    "notes_iv_diag": ("Estatística de teste e p-valor entre parênteses; conjuntos de confiança "
+                      "entre colchetes. F efetivo: valor crítico de 23,1 (viés máximo de 10\\%, "
+                      "Montiel Olea e Pflueger, 2013). Cragg-Donald: valores críticos de Stock e "
+                      "Yogo (tamanho máximo de 10\\%) entre colchetes, válidos só com erros iid. "
+                      "AKM: Adão, Kolesár e Morales (2019)."),
     "notes_diag": ("Estatística de teste e p-valor entre parênteses. Raiz unitária: Z de Choi "
                    "(Fisher-ADF). Testes em resíduos de efeitos fixos quando aplicável."),
     "notes_rob": ("Coeficiente e erro-padrão entre parênteses. * p<0,10; ** p<0,05; *** p<0,01. "
@@ -39,6 +57,11 @@ EN = {
                    "Residual-based tests use fixed-effects residuals where applicable."),
     "notes_rob": ("Coefficient with standard error in parentheses. * p<0.10; ** p<0.05; "
                   "*** p<0.01. Each row changes a single element relative to the baseline."),
+    "notes_iv_diag": ("Test statistic with p-value in parentheses; confidence sets in brackets. "
+                      "Effective F: critical value 23.1 (10\\% worst-case bias, Montiel Olea and "
+                      "Pflueger, 2013). Cragg-Donald: Stock-Yogo critical values (10\\% maximal "
+                      "size) in brackets, valid only under iid errors. AKM: Ad\\~ao, Koles\\'ar "
+                      "and Morales (2019)."),
 }
 
 
@@ -62,6 +85,22 @@ def tr(s: str, lang: str) -> str:
                      "Exclui |resíduo| > 3 dp"), ("Balanced sub-panel", "Subpainel balanceado"),
                      ("entities", "unidades"), ("Early period", "Período inicial"),
                      ("Late period", "Período final"), ("Baseline", "Base"),
+                     ("First stage: Sanderson-Windmeijer F", "1º estágio: F de Sanderson-Windmeijer"),
+                     ("Shift-share: AKM standard error", "Shift-share: erro-padrão AKM"),
+                     ("AKM first-stage F", "F do 1º estágio (AKM)"),
+                     ("AKM0 test (beta = 0)", "teste AKM0 (beta = 0)"),
+                     ("AKM0 95% confidence set", "conjunto de confiança AKM0 (95%)"),
+                     ("shock clusters", "clusters de choques"),
+                     ("effective number of shocks", "número efetivo de choques"),
+                     ("top-5 Rotemberg weight share", "peso dos 5 maiores (Rotemberg)"),
+                     ("sum of negative Rotemberg weights", "soma dos pesos de Rotemberg negativos"),
+                     ("sum of shares (min-max)", "soma das participações (mín.-máx.)"),
+                     ("not controlled", "sem controle"), ("baseline", "base"),
+                     ("clustered by ", "cluster por "), ("Two-step GMM", "GMM em dois passos"),
+                     ("Without instrument ", "Sem o instrumento "),
+                     ("Strongest instrument only", "Só o instrumento mais forte"),
+                     ("Control for the sum of shares", "Controle para a soma das participações"),
+                     ("y and x", "y e x"), ("OLS", "MQO"), ("empty", "vazio"),
                      ("conflicting", "conflitante"), ("not stationary", "não estacionária"),
                      ("stationary", "estacionária"),
                      ("inconclusive (possibly I(2) or short sample)",
@@ -121,7 +160,7 @@ def role_name(test: str, model: dict) -> str:
     return test
 
 
-def diagnostics_table(models: dict, labels: dict, lang: str) -> str:
+def diagnostics_table(models: dict, labels: dict, lang: str, notes_key: str = "notes_diag") -> str:
     names = list(models)
     order: list[str] = []
     by_role: dict[str, dict[str, dict]] = {n: {} for n in names}
@@ -137,7 +176,9 @@ def diagnostics_table(models: dict, labels: dict, lang: str) -> str:
         cells = []
         for n in names:
             t = by_role[n].get(test)
-            if t is None or (t.get("statistic") is None and t.get("pvalue") is None):
+            if t is not None and t.get("display") is not None:
+                cells.append(esc(tr(t["display"], lang)))
+            elif t is None or (t.get("statistic") is None and t.get("pvalue") is None):
                 cells.append("--")
             elif t.get("statistic") is None:
                 cells.append(esc(tr(str(t.get("order", "--")), lang)))
@@ -145,7 +186,8 @@ def diagnostics_table(models: dict, labels: dict, lang: str) -> str:
                 cells.append(f"{num(t['statistic'], 2)} ({num(t['pvalue'])})")
         body.append(esc(tr(test, lang)) + " & " + " & ".join(cells) + r" \\")
     return wrap(body, len(names), tr("Specification and diagnostic tests", lang),
-                "tab:diagnostics", tr("notes_diag", lang))
+                "tab:diagnostics" if notes_key == "notes_diag" else "tab:iv_diagnostics",
+                tr(notes_key, lang))
 
 
 def describe_baseline(m: dict, lang: str) -> str:
@@ -163,6 +205,15 @@ def describe_baseline(m: dict, lang: str) -> str:
            "robust": ("erros-padrão robustos", "robust standard errors"),
            "unadjusted": ("erros-padrão não ajustados", "unadjusted standard errors")}
     i = 0 if lang == "pt" else 1
+    if m.get("estimator"):  # IV models
+        est = {"2sls": "2SLS", "liml": "LIML", "gmm": "GMM", "fuller": "Fuller"}[m["estimator"]]
+        cv = m.get("cov", "robust")
+        if cv.startswith("cluster:"):
+            c = (f"erros-padrão clusterizados por {cv[8:]}" if lang == "pt"
+                 else f"standard errors clustered by {cv[8:]}")
+        else:
+            c = cov.get(cv, (cv, cv))[i]
+        return f"Base: {est}, {esc(c)}." if lang == "pt" else f"Baseline: {est}, {esc(c)}."
     e = eff.get(m.get("effects"), (None, None))[i]
     c = cov.get(m.get("cov"), (m.get("cov"), m.get("cov")))[i]
     if e is None:  # OLS (time series / cross section)
@@ -176,14 +227,26 @@ def robustness_table(models: dict, labels: dict, lang: str) -> str:
     head = [col_head(labels[n] + (f" ({k})" if multi_key else "")) for n, k in cols]
     body = [tr("Variant", lang) + " & " + " & ".join(head) + r" \\"]
     stacked = len(cols) > 3  # wide tables: standard error on its own line
-    first = models[cols[0][0]]["variants"]
+    # rows are matched by (group, variant label), not by position: models can run
+    # different variant sets (e.g. a balanced sub-panel or leave-one-instrument-out rows)
+    def vkey(v):
+        return (v["group"], "Baseline" if v["group"] == "Baseline" else v["variant"])
+    order: list[tuple[str, str]] = []
+    for n in models:
+        for v in models[n]["variants"]:
+            k = vkey(v)
+            if k not in order:
+                # keep groups together: insert after the last row of the same group
+                same = [i for i, o in enumerate(order) if o[0] == k[0]]
+                order.insert(same[-1] + 1 if same else len(order), k)
+    by_model = {n: {vkey(v): v for v in models[n]["variants"]} for n in models}
     group = None
-    for i, v0 in enumerate(first):
+    for gk in order:
+        v0 = next(by_model[n][gk] for n in models if gk in by_model[n])
         if v0["group"] != group:
             group = v0["group"]
             body += [r"\midrule", rf"\multicolumn{{{len(cols) + 1}}}{{l}}{{\textit{{{esc(tr(group, lang))}}}}} \\"]
-        row = [models[n]["variants"][i] if i < len(models[n]["variants"]) else {}
-               for n, _ in cols]
+        row = [by_model[n].get(gk, {}) for n, _ in cols]
         excluded = [not v.get("counts_for_verdict", True) for v in row]
         whole_row = all(excluded)  # dagger on the label; otherwise on each excluded cell
         cells, se_cells = [], []
@@ -211,8 +274,12 @@ def robustness_table(models: dict, labels: dict, lang: str) -> str:
         for n, k in cols:
             j = (models[n].get("jackknife") or {}).get(k)
             cells.append(f"[{j['min']:.3f}; {j['max']:.3f}]" if j else "--")
-        body += [r"\midrule", esc(tr("Jackknife (leave one entity out): range", lang)) + " & "
-                 + " & ".join(cells) + r" \\"]
+        units = {j.get("unit", "entity") for n, k in cols
+                 for j in [(models[n].get("jackknife") or {}).get(k)] if j}
+        unit = units.pop() if len(units) == 1 else "unit"
+        lab = (f"Jackknife (leave one {unit} out): range" if unit != "unit"
+               else "Jackknife (leave one unit out): range")
+        body += [r"\midrule", esc(tr(lab, lang)) + " & " + " & ".join(cells) + r" \\"]
     base_desc = describe_baseline(models[cols[0][0]], lang)
     notes = (tr("notes_rob", lang) + " " + base_desc + r" $^\dagger$ "
              + ("Informativo; não entra no veredito (estimando diferente ou estimador "
@@ -247,6 +314,14 @@ def main(argv: list[str]) -> None:
         (out / "table_diagnostics.tex").write_text(diagnostics_table(o, labels, lang), "utf-8")
         (out / "table_robustness.tex").write_text(robustness_table(o, labels, lang), "utf-8")
         written += ["table_diagnostics.tex", "table_robustness.tex"]
+    iv_file = out / "iv_diagnostics.json"
+    if iv_file.exists():
+        v = json.loads(iv_file.read_text(encoding="utf-8"))["models"]
+        (out / "table_iv_diagnostics.tex").write_text(
+            diagnostics_table(v, labels, lang, "notes_iv_diag"), "utf-8")
+        (out / "table_iv_robustness.tex").write_text(
+            robustness_table(v, labels, lang).replace("tab:robustness", "tab:iv_robustness"), "utf-8")
+        written += ["table_iv_diagnostics.tex", "table_iv_robustness.tex"]
     if not written:
         sys.exit("no result JSON found in output_dir: run the diagnostics scripts first")
     for w in written:

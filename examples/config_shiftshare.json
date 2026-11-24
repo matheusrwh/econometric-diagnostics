@@ -1,0 +1,24 @@
+{
+  "title": "Synthetic shift-share example",
+  "data": "ss_regions.csv",
+  "cluster": "state",
+  "weights": "pop",
+  "output_dir": "output_ss",
+  "models": {
+    "bartik": {
+      "formula": "y ~ 1 + [x ~ z_bartik]",
+      "key": ["x"],
+      "label": "Shift-share IV",
+      "shift_share": {
+        "instrument": "z_bartik",
+        "exposure": "ss_exposure.csv",
+        "shocks": "ss_shocks.csv",
+        "obs_id": "region",
+        "shock_id": "sector",
+        "share": "share",
+        "shock": "g",
+        "shock_cluster": "sector_group"
+      }
+    }
+  }
+}

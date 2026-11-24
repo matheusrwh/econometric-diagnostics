@@ -20,6 +20,12 @@ the numbers). Sample: N entities, T periods, unbalanced/balanced, exclusions.
 Table with the test, H0, and the result per model (statistic, p-value). Then, in plain
 words, what each block means for this paper — not a definition of the test.
 
+IV models: first stage (sign, effective F against 23.1, and 104.7 with one instrument),
+reduced form, the weak-IV-robust set used for inference (Anderson-Rubin, or AKM0 for
+shift-share), endogeneity and overidentification — stating that the exclusion restriction
+is argued, not tested. Shift-share: AKM vs the paper's SEs, Rotemberg top sectors, effective
+number of shocks, sum of shares.
+
 ## 4. Decisions: estimator and inference
 
 - Estimator: ... because ...

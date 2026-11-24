@@ -1,0 +1,18 @@
+{
+  "title": "Synthetic IV example",
+  "data": "iv_example.csv",
+  "cluster": "state",
+  "output_dir": "output_iv",
+  "models": {
+    "two_instruments": {
+      "formula": "y ~ 1 + w + [x ~ z1 + z2]",
+      "key": ["x"],
+      "label": "2SLS, z1 and z2"
+    },
+    "weak_only": {
+      "formula": "y ~ 1 + w + [x ~ z2]",
+      "key": ["x"],
+      "label": "2SLS, z2 only"
+    }
+  }
+}

@@ -1,6 +1,6 @@
 ---
 name: econometric-diagnostics
-description: Diagnose and stress-test an estimated econometric model (panel, time series or cross section) in Python. Replicates the user's baseline, runs the specification and diagnostic tests that fit the data structure, decides the appropriate inference, runs a one-change-at-a-time robustness battery, and writes LaTeX tables plus an interpreted report with a methodology paragraph. Use when the user asks to validate, diagnose, check the robustness of, or report the tests for a regression they have estimated (statsmodels, linearmodels, or a Stata/R model that can be re-expressed as a formula).
+description: Diagnose and stress-test an estimated econometric model (panel, time series or cross section, OLS or IV/2SLS including shift-share/Bartik instruments) in Python. Replicates the user's baseline, runs the specification and diagnostic tests that fit the data structure, decides the appropriate inference, runs a one-change-at-a-time robustness battery, and writes LaTeX tables plus an interpreted report with a methodology paragraph. Use when the user asks to validate, diagnose, check the robustness of, or report the tests for a regression they have estimated (statsmodels, linearmodels, or a Stata/R model that can be re-expressed as a formula).
 ---
 
 # Econometric diagnostics and robustness
@@ -34,9 +34,13 @@ what to recommend. Never let the scripts' flags replace reading the numbers.
 | `panel_diagnostics.py` | panel | F entity/time effects, BP-LM, Hausman, Mundlak, Wooldridge AR(1), modified Wald, Pesaran CD, Fisher-ADF unit roots, VIF, outliers; `--skip-unit-root` | `panel_diagnostics.json` |
 | `robustness.py` | panel | baseline + inference / estimator / sample variants + leave-one-entity-out jackknife + verdict; `--no-jackknife` | `robustness.json` |
 | `ols_diagnostics.py` | time series, cross section | diagnostics **and** robustness for OLS | `ols_diagnostics.json` |
-| `to_latex.py` | all | booktabs tables; `--lang en` or `--lang pt` | `table_diagnostics.tex`, `table_robustness.tex` |
+| `iv_diagnostics.py` | IV / 2SLS (cross section, pooled) | first stage (effective F, robust/KP F, Cragg-Donald, Sanderson-Windmeijer), reduced form, Anderson-Rubin set, control-function endogeneity, Hansen J / Sargan / C; shift-share: AKM and AKM0, Rotemberg weights, effective number of shocks, sum of shares; robustness + verdict; `--no-jackknife` | `iv_diagnostics.json` |
+| `to_latex.py` | all | booktabs tables; `--lang en` or `--lang pt` | `table_diagnostics.tex`, `table_robustness.tex` (`table_iv_*.tex` for IV) |
 
 Requirements: `pandas numpy scipy statsmodels linearmodels patsy` (see `requirements.txt`).
+`python tests/validate_iv.py` checks the IV code against published textbook results and
+exact identities (add `--mc 500` for a Monte Carlo of shift-share inference); run it after
+installing or changing the scripts.
 Use the project's own environment if it has them; otherwise ask before installing anything.
 The jackknife refits the model once per entity (about 1 s per fit for a two-way FE panel
 with ~3,000 obs); use `--no-jackknife` while iterating and run the full battery once.
@@ -63,6 +67,16 @@ within variation (FE will be imprecise), and heavy tails (excess kurtosis, value
 ### 3. Run the diagnostics
 - Panel: `panel_diagnostics.py config.json`
 - Time series / cross section: `ols_diagnostics.py config.json` (includes robustness)
+- IV / 2SLS: `iv_diagnostics.py config.json` (includes robustness). Formula with a bracket
+  block, `y ~ 1 + w + [x ~ z1 + z2]`. Check the line `numerical cross-check vs
+  linearmodels` (should be ~1e-12) and that the baseline matches the paper.
+- **Shift-share (Bartik) IV**: ask the user for the exposure (shares) and the shocks, not
+  only the constructed instrument; without them the shift-share block cannot run. Add a
+  `shift_share` block to the model (see `references/config_schema.md`). The script rebuilds
+  the instrument as Σₖ sᵢₖ gₖ and stops if it does not match the data column — reconcile
+  before going on (replicate first). Ask whether the paper's identification argument rests
+  on the **shares** (Goldsmith-Pinkham, Sorkin and Swift) or on the **shocks** (Borusyak,
+  Hull and Jaravel); the decision tree treats them differently.
 
 ### 4. Interpret and decide
 Open `references/decision_tree.md` and walk through it **with the actual numbers** for every
@@ -75,6 +89,13 @@ Write down, before step 5:
 - the recommended estimator (pooled / RE / FE entity / FE two-way / FD) and why;
 - the recommended standard errors and why;
 - what the baseline in the paper gets right and what it should change.
+
+For IV, write down in addition: whether the instruments are strong (effective F vs 23.1;
+F vs 104.7 for the usual t-test with one instrument), which weak-IV-robust set you rely on
+(Anderson-Rubin; **AKM0** for shift-share — the region-level AR set is not robust to
+shock-level correlation), and the recommended standard errors (AKM for shift-share).
+**Never claim the exclusion restriction is "tested"**: overidentification tests only
+compare instruments, and assume at least one is valid.
 
 ### 5. Run the robustness battery (panel)
 `robustness.py config.json`. Each variant changes exactly one thing relative to the
@@ -90,6 +111,13 @@ baseline (see the script docstring). Read the verdict per key coefficient:
 Rows marked `[info]` (pooled OLS, between) answer a different question and do not count
 for the verdict; use them to discuss whether the relation is mainly within or between
 entities.
+
+IV verdict (from `iv_diagnostics.py`): same rules, plus the weak-IV-robust set (AR, or
+AKM0 for shift-share) enters it — a set that contains zero while the baseline is
+significant counts as losing significance; an unbounded set makes the coefficient
+`FRAGILE` (the data do not identify it). `WEAK INSTRUMENTS` in the verdict line means: report
+the robust set as the main inference. Leave-one-instrument-out rows are heterogeneity
+(different instruments can identify different LATEs). OLS is `[info]`.
 
 ### 6. Tables
 `to_latex.py config.json --lang <en|pt>` — match the language of the paper. The tables need
@@ -110,7 +138,10 @@ one or two changes you recommend, and the paths of the report and tables.
 - "Just run the tests": steps 1–4, plus the diagnostics table.
 - "Is my result robust?": steps 1, 2, 5, a short report.
 - Time series or cross section: `ols_diagnostics.py` covers steps 3 and 5 together.
-- Models the scripts do not cover (IV/2SLS, GMM, nonlinear, VAR, survival): say so, run
+- IV / 2SLS and shift-share: `iv_diagnostics.py` covers steps 3 and 5 together. Panel IV
+  with absorbed fixed effects is not covered (only FE as `C()` dummies, fine for few
+  groups); dynamic panel GMM, shock-level (BHJ) regressions and recentering are not covered.
+- Models the scripts do not cover (panel IV with many FE, dynamic GMM, nonlinear, VAR, survival): say so, run
   what applies (`inspect_data.py`, residual checks via a formula approximation if
   meaningful), and list the specific tests the user should run instead
   (`references/interpretation.md`, "Not covered").

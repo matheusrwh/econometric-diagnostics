@@ -89,12 +89,111 @@ observations. With heavy-tailed macro data, 1–2 % beyond 3 sd is common.
 - **Cook's distance** threshold 4/n; flag only when more than 10 % exceed it or any D > 1.
 - **Huber RLM** and **LAD** are outlier-robust alternatives (different loss functions).
 
+## IV / 2SLS (iv_diagnostics.py)
+
+Notation: K1 endogenous regressors, L excluded instruments. Formulas are in
+`scripts/iv_core.py`; `tests/validate_iv.py` checks them.
+
+**Effective F (Montiel Olea and Pflueger 2013)** — π̂′(Z̃′Z̃)π̂ / tr(V̂π Z̃′Z̃), with V̂π the
+robust/clustered covariance of the first-stage coefficients. Valid under
+heteroskedasticity, clustering and autocorrelation; equals the non-robust F under iid
+errors and the robust Wald F when L = 1. Simplified critical value 23.1 (worst-case Nagar
+bias of 10 % of the OLS bias, 5 % test). K1 = 1 only.
+
+**Robust first-stage F (Kleibergen-Paap Wald)** — robust Wald test of the excluded
+instruments divided by L. With K1 = 1 it is the Kleibergen-Paap rk Wald F up to Stata's
+small-sample scaling. Note: linearmodels prints the Wald χ² (= L × F) for robust covariances.
+
+**Cragg-Donald F + Stock-Yogo** — the non-robust F with Stock-Yogo critical values (10 %
+maximal size: 16.38 for L = 1, 19.93 for L = 2, 22.30 for L = 3). Valid only with iid
+errors; report as a reference, as with the classic Hausman.
+
+**Sanderson-Windmeijer F** (K1 > 1) — conditional first-stage F for each endogenous
+regressor, net of the others; robust Wald divided by L − K1 + 1. A low value for one
+regressor means the instruments do not separate it from the other endogenous ones.
+
+**Reduced form** — y on the instruments and controls. With one endogenous regressor its
+joint test *is* the Anderson-Rubin test of β = 0.
+
+**Anderson-Rubin set** — all β₀ for which y − β₀x is unrelated to the instruments (Wald
+with the chosen covariance). Exact size whatever the instrument strength; with L = 1 it is
+the efficient weak-IV-robust test. With L = 1 the set is computed exactly (it can be an
+interval, the union of two rays, or the whole line); with L > 1 by grid inversion, and
+`(grid edge)` means it may be unbounded. Less powerful than CLR with many instruments (CLR
+is not implemented: R `ivmodel`, Stata `weakiv`).
+
+**Control-function test (robust Durbin-Wu-Hausman)** — adds first-stage residuals to the
+structural equation; H0: coefficients zero (regressors exogenous). Equals the Wu-Hausman F
+under iid errors. Low power with weak instruments.
+
+**Hansen J / Sargan / C** — H0: all instruments valid, given at least K1 of them are.
+Hansen J uses two-step GMM with robust/clustered weights; Sargan only under iid. The C
+statistic for an instrument is J(all) − J(without it), with separately estimated weight
+matrices, so it can be negative (then uninformative). With heterogeneous effects (LATE),
+valid instruments can still reject.
+
+**Robustness rows** — OLS `[info]`; LIML and Fuller(1) (less biased than 2SLS with weak
+or many instruments; LIML = 2SLS when just identified); two-step GMM; leave one
+instrument out and strongest instrument only (heterogeneity rows); winsorized y; winsorized
+y, x and instruments together (not for shift-share); trimmed residuals; jackknife by
+cluster with the minimum effective F across drops.
+
+Never winsorize x alone in IV: when x and the instruments share long tails (e.g. migration
+inflows to frontier regions) capping x destroys the first stage and the row looks fragile
+for a mechanical reason. When winsorizing y, x and Z together leaves a weak first stage
+(F < 10), the row is excluded from the verdict and `IDENTIFICATION_FROM_TAILS` is raised:
+the instrument identifies the effect mainly from a few extreme observations — name them
+and report the estimate without them; it is a finding about identification, not fragility.
+
+## Shift-share IV
+
+**AKM standard error (Adão, Kolesár and Morales 2019)** — variance from shock-level
+variation: Σ_c (Σ_{k∈c} X̂ₖ R̂ₖ)² / (Σ wᵢ z̃ᵢ xᵢ)², with R̂ₖ = Σᵢ wᵢ sᵢₖ ε̂ᵢ and X̂ the shocks
+recovered by regressing the residualized instrument on the shares. Reduces to the HC0 SE
+when each region has one sector (checked in the validation). Needs the shares and shocks.
+With few effective shocks it over-rejects; prefer AKM0.
+
+Two practical traps:
+- **Raw shocks instead of X̂.** Plugging the raw shocks gₖ into the formula (instead of X̂)
+  keeps their common mean, which controls such as the sum of shares already absorb; when
+  the mean is large relative to the dispersion the SE is badly inflated (a factor of 3–4
+  in an application with mean 0.15 and sd 0.04). Compare `shock_mean` and `shock_sd`.
+- **Many shocks per observation** (`AKM_MANY_SHOCKS_PER_OBS`, K/N > 0.5): X̂ comes from a
+  regression on K exposure columns with N rows and becomes noisy (low `corr_xhat_shock`,
+  ill-conditioned shares). Report AKM and AKM0, but say that their reliability is limited;
+  shock clusters (fewer, larger units) and the shock-level regression of BHJ help.
+
+**AKM0** — the null-imposed version: residuals computed under H0, set obtained by inverting
+t(β₀)² ≤ 1.96² (exact quadratic, may be unbounded). Correct size in the validation Monte
+Carlo and robust to weak instruments. The main shift-share inference.
+
+**AKM first-stage F** — the first-stage t² with AKM variance; region-level first-stage F
+statistics overstate strength for the same reason SEs are too small.
+
+**Rotemberg weights (Goldsmith-Pinkham, Sorkin and Swift 2020)** — αₖ = gₖ sₖ′w x̃ /
+Σⱼ gⱼ sⱼ′w x̃, with β̂ = Σ αₖ β̂ₖ and β̂ₖ the IV that uses only sector k's shares. They
+show which sectors' shares drive identification. Exact identity checked in the validation.
+
+**Effective number of shocks** — 1 / HHI of average exposure (BHJ). Shock-level
+identification needs it to be large.
+
+**Sum of shares** — when it varies across observations and is not a control, the
+instrument mixes shock variation with the total share (BHJ). Detected by checking whether
+the sum lies in the span of the controls.
+
+**Shock jackknife** — drops one shock (or shock cluster) from the instrument; closed form
+when controls stay fixed, refit when the sum of shares is a control.
+
 ## Not covered (say so and recommend)
 
 - Second-generation panel unit roots (CIPS), panel cointegration (Pedroni, Westerlund).
 - Wild cluster bootstrap for few clusters.
-- IV/2SLS diagnostics: first-stage F / Kleibergen-Paap, over-identification (Hansen J),
-  endogeneity (Durbin-Wu-Hausman).
+- Panel IV with absorbed high-dimensional fixed effects (use `pyfixest` / R `fixest` /
+  Stata `ivreghdfe`); CLR and Kleibergen-Paap rk with K1 > 1; tF critical values.
+- Shift-share: shock-level regression and shock balance (Stata `ssaggregate`), recentering
+  (Borusyak and Hull 2023), pre-trend and balance tests of top-Rotemberg shares (need
+  variables chosen with the user), AKM with several instruments.
+- Plausibly exogenous sensitivity (Conley, Hansen and Rossi 2012).
 - Dynamic panel GMM: Arellano-Bond AR(2), Hansen J, instrument count.
 - Nonlinear models (logit/probit, Poisson PPML), survival models, VAR/VECM.
 - Multiple structural breaks (Bai-Perron), heterogeneous slopes (mean group, CCE).
